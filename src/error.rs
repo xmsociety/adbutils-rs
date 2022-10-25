@@ -3,7 +3,6 @@ use std::error::Error;
 #[derive(Debug)]
 pub enum AdbError {
     StartAdbFailed {
-        bin_path: String,
         source: Box<dyn Error>,
     },
     TcpConnectError {
@@ -21,4 +20,7 @@ pub enum AdbError {
     ResponseStatusError {
         content: String,
     },
+    UnknownError {
+        source: Box<dyn Error>,
+    }
 }
