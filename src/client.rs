@@ -1,20 +1,22 @@
-
+use std::env;
+use std::fmt::{Debug, format};
 use std::net::{Shutdown, TcpStream};
 use std::io;
-use std::env;
-use std::ffi::CString;
-use std::io::{Error, Read};
+use std::io::{Error, Read, Write};
 use std::ops::Neg;
 use std::path::{Path, PathBuf};
 use path_absolutize::*;
 
 use std::process::Command;
-use std::slice::RSplit;
 use std::time;
-use log::{error, log};
+use log::{error, log, log_enabled};
 
 use crate::error::*;
 
+const OKAY: &str = "OKAY";
+const FAIL: &str = "FAIL";
+const DENT: &str = "DENT";
+const DONE :&str = "DONE";
 
 const WINDOWS: &str = "windows";
 const MAC: &str = "macos";
@@ -52,11 +54,15 @@ impl AdbClient {
         adb_connection
     }
 
+    // Done ✅
     pub fn server_version(&self) -> i32 {
-        let conn = self._connect();
-        // conn.
-        1
+        let mut conn = self._connect();
+        conn.send_command("host:version").unwrap();
+        conn.check_oky().unwrap();
+        let res = conn.read_string_block().unwrap();
+        res.parse::<i32>().unwrap() + 16
     }
+
     pub fn server_kill(&self) {
         unimplemented!()
     }
@@ -66,11 +72,15 @@ impl AdbClient {
     }
 
     pub fn connect(&self, addr: &str) -> String {
-        unimplemented!()
+        let mut conn = self._connect();
+        conn.send_command(&format!("host:connect:{}", addr)).unwrap();
+        conn.read_string_block().unwrap()
     }
 
     pub fn dis_connect(self, addr: &str, raise_err: bool) -> String {
-        unimplemented!()
+        let mut conn = self._connect();
+        conn.send_command(&format!("host:disconnect:{}", addr)).unwrap();
+        conn.read_string_block().unwrap()
     }
 
     pub fn shell(&self, commadn: &str, stream: bool) {
@@ -192,7 +202,9 @@ impl AdbConnection {
         }
     }
 
-    fn read(&self, n: usize) {}
+    fn read(&mut self, n: usize) -> Result<String, AdbError>  {
+        self.read_full(n)
+    }
 
     fn read_full(&mut self, n: usize) -> Result<String, AdbError> {
         let mut buff = vec![0; n];
@@ -208,7 +220,10 @@ impl AdbConnection {
                 };
 
                 match String::from_utf8(Vec::from(buff)) {
-                    Ok(content_string) => Ok(content_string),
+                    Ok(content_string) => {
+                        println!("read: => {}", content_string);
+                        return Ok(content_string)
+                    }
                     Err(error) => {
                         return Err(AdbError::ParseResponseError {
                             source: Box::new(error),
@@ -216,48 +231,79 @@ impl AdbConnection {
                     }
                 }
             },
-            None => {}
+            None => {
+                println!("{:?}", "NoneNoneNoneNoneNone");
+                Ok("".to_string())
+            }
         }
 
     }
 
-    fn send_command(&self) -> Result<String, AdbError> {
-        unimplemented!()
+    fn add_command_length_prefix(&self, command_body: String) -> String {
+        let trim_command = command_body.trim();
+        let trim_command_length = format!("{:04X}", trim_command.len());
+        trim_command_length + trim_command
     }
 
-    fn read_string(&self) -> Result<String, AdbError> {
-        unimplemented!()
-    }
-
-    fn read_string_block(&self) -> Result<String, AdbError> {
-        unimplemented!()
-    }
-
-    fn read_until_close(&self) -> Result<String, AdbError> {
-        unimplemented!()
-    }
-
-    fn check_oky(&mut self) -> Result<String, AdbError>{
-        let mut is_ok_buffer = [0; 4];
+    fn send_command(&mut self, cmd: &str) -> Result<(), AdbError> {
+        let msg = self.add_command_length_prefix(cmd.to_string());
         match &mut self.conn {
             Some(conn) => {
-                match conn.read_exact(&mut is_ok_buffer) {
-                    Ok(_) => {}
-                    Err(error) => {
-                        return Err(AdbError::TcpReadError {
-                            source: Box::new(error),
-                        });
-                    }
-                }
-                match String::from_utf8(Vec::from(is_ok_buffer)) {
-                    Ok(response_status) => Ok(response_status),
-                    Err(error) => Err(AdbError::ParseResponseError {
+                match conn.write_all(msg.as_ref()) {
+                    Ok(_) => Ok(()),
+                    Err(error) => Err(AdbError::TcpWriteError {
                         source: Box::new(error),
                     }),
                 }
-            }
-            None => {}
+            },
+            None => {Ok(()) }
         }
+    }
+
+    fn read_string(&mut self, n: usize) -> String {
+        let res = match self.read(n) {
+            Ok(res) => res,
+            Err(error ) => {
+                println!("{:?}", error);
+                String::new()
+            }
+        };
+        res
+    }
+
+    fn read_string_block(&mut self) -> Result<String, AdbError> {
+        let res = self.read_string(4);
+        if res.len() == 0 {
+            return Err(AdbError::ResponseStatusError {content: String::from("receive data error connection closed")})
+        }
+        let size = res.parse::<usize>().unwrap();
+        let res = self.read_string(size);
+        Ok(res)
+    }
+
+    fn read_until_close(&mut self) -> Result<String, AdbError> {
+        let mut res = String::new();
+        loop {
+            let mut origin_buffer = self.read(4096 );
+            let buffer = match origin_buffer {
+                Ok(r) => { res += &*r; r}
+                Err(error) => {String::new()}
+            };
+            if buffer.len() == 0 {
+                break
+            }
+        }
+        Ok(res.to_string())
+    }
+
+    fn check_oky(&mut self) -> Result<(), AdbError>{
+        let data = self.read_string(4);
+        if data == FAIL {
+            log::debug!("receive data: {} connection closed", data)
+        } else if data == OKAY {
+            return Ok(())
+        }
+        Ok(())
     }
 }
 
@@ -275,6 +321,6 @@ mod test {
     fn test_connect() {
         let adb = AdbClient::new(String::from("localhost"), 5037, time::Duration::new(10, 0));
         let client = adb._connect();
-        println!("{:?}", client)
+        println!("adb version: {:?}", adb.server_version())
     }
 }
