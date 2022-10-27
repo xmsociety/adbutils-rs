@@ -1,4 +1,3 @@
-use core::panicking::panic;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, write};
 use std::time;
@@ -13,7 +12,7 @@ pub struct ShellMixin<'a> {
     pub properties: Option<HashMap<String, String>>
 }
 
-impl ShellMixin {
+impl ShellMixin<'_> {
 
     pub fn new(client: &AdbClient, serial: String, transport_id: i32, properties: Option<HashMap<String, String>>) -> Self {
         Self{
@@ -24,13 +23,13 @@ impl ShellMixin {
         }
     }
 
-    fn run(&self, cmd: &str) -> Result<String, AdbError> {
+    fn run(&self, cmd: String) -> Result<String, AdbError> {
     unimplemented!()
     }
 
     fn say_hello(&self) -> String {
-        let content = "hello from " + &self.serial;
-        let res = self.run("echo " + content);
+        let content = "hello from ".to_string() + &self.serial;
+        let res = self.run("echo ".to_string() + content.as_str());
         return res.unwrap()
     }
 
@@ -39,23 +38,30 @@ impl ShellMixin {
         conn.set_timeout(time_out).unwrap();
         if command != "" {
             if self.transport_id > 0 {
-                conn.send_command("host-transport-id:" + &format!("{}:{}", self.transport_id, command)).unwrap()
+                conn.send_command(&format!("host-transport-id:{}:{}", self.transport_id, command)).unwrap()
             } else if self.serial != "" {
-                conn.send_command("host-serial:" + &format!("{}:{}", self.serial, command)).unwrap()
+                conn.send_command(&format!("host-serial:{}:{}", self.serial, command)).unwrap()
             } else {
-                panic("RuntimeError")
+                panic!("RuntimeError")
             };
-            conn.check_oky()
+            conn.check_oky();
         }
         conn
     }
 }
 
-pub struct AdbDevice {
-    pub shell_mixin: ShellMixin
+pub struct AdbDevice<'a> {
+    pub shell_mixin: ShellMixin<'a>
 }
 
-impl AdbDevice {
+trait AdbConnectionOrString {
+    fn string(&self) {
+        println!("1111")
+    }
+}
+
+
+impl AdbDevice<'_> {
     pub fn get_with_command(&self, cmd: &str) -> String {
         let mut conn = self.shell_mixin.open_transport("", self.shell_mixin.client.socket_time);
         conn.send_command(&format!("host-serial:{}:{}", self.shell_mixin.serial, cmd)).unwrap();
@@ -90,23 +96,27 @@ impl AdbDevice {
         unimplemented!()
     }
 
-    pub fn shell<T>(&self, cmd: &str, stream: bool, time_out: time::Duration) -> T {
+    pub fn shell(&self, cmd: &str, stream: bool, time_out: time::Duration) -> Box<dyn AdbConnectionOrString> {
         let mut conn = self.shell_mixin.open_transport("", time_out);
-        conn.send_command("shell:" + cmd).unwrap();
+        conn.send_command(&format!("shell:{}", cmd)).unwrap();
         conn.check_oky().unwrap();
         if stream {
-            conn
+            return Box::new(conn)
         }
-        conn.read_until_close()
+        Box::new(conn.read_until_close().unwrap())
     }
 
-    pub fn shell_out_put<T>(&self, cmd: &str) -> T {
+    pub fn shell_out_put(&self, cmd: &str) -> String {
         self.shell_mixin.client.shell(&self.shell_mixin.serial, cmd, false)
     }
 
 }
 
-impl Display for AdbDevice {
+impl AdbConnectionOrString for AdbConnection {}
+
+impl AdbConnectionOrString for String {}
+
+impl Display for AdbDevice<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "AdbDevice(serial={})", self.shell_mixin.serial)
     }

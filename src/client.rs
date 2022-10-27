@@ -83,12 +83,12 @@ impl AdbClient {
         conn.read_string_block().unwrap()
     }
 
-    pub fn shell(&self, serial: &str, commad: &str, stream: bool) {
+    pub fn shell(&self, serial: &str, commad: &str, stream: bool) -> String {
         let sn_tid = SerialNTransportID{
             serial: serial.to_string(),
             transport_id: 0,
         };
-        self.
+        sn_tid.serial
     }
 
     pub fn devices_list(&self) -> Vec<AdbDevice>{
