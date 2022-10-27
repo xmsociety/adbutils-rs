@@ -1,9 +1,8 @@
 use std::env;
-use std::fmt::{Debug, format};
+use std::fmt::{Debug};
 use std::net::{Shutdown, TcpStream};
 use std::io;
 use std::io::{Error, Read, Write};
-use std::ops::Neg;
 use std::path::{Path, PathBuf};
 use path_absolutize::*;
 
@@ -12,6 +11,7 @@ use std::time;
 use log::{error, log, log_enabled};
 
 use crate::error::*;
+use crate::device::{AdbDevice, ShellMixin};
 
 const OKAY: &str = "OKAY";
 const FAIL: &str = "FAIL";
@@ -43,7 +43,7 @@ impl AdbClient {
         }
     }
 
-    fn _connect(&self) -> AdbConnection {
+    pub fn _connect(&self) -> AdbConnection {
         let mut adb_connection = AdbConnection {
             host: self.host.clone(),
             port: self.port,
@@ -83,19 +83,31 @@ impl AdbClient {
         conn.read_string_block().unwrap()
     }
 
-    pub fn shell(&self, commadn: &str, stream: bool) {
+    pub fn shell(&self, serial: &str, commad: &str, stream: bool) {
+        let sn_tid = SerialNTransportID{
+            serial: serial.to_string(),
+            transport_id: 0,
+        };
+        self.
+    }
+
+    pub fn devices_list(&self) -> Vec<AdbDevice>{
         unimplemented!()
     }
 
-    pub fn devices_list(&self) {
-        unimplemented!()
-    }
-
-    pub fn device(&self) {
+    pub fn device(&self, sn_tid: SerialNTransportID) -> AdbDevice {
+        if sn_tid.serial != "" || sn_tid.transport_id != 0 {
+            AdbDevice{shell_mixin: ShellMixin::new(self, sn_tid.serial, sn_tid.transport_id, None)}
+        }
+        let serial = "";
         unimplemented!()
     }
 }
 
+struct SerialNTransportID {
+    serial: String,
+    transport_id: i32,
+}
 
 fn adb_path() -> String {
     let cwd = env::current_dir().unwrap();
@@ -159,7 +171,7 @@ impl AdbConnection {
         Ok(conn)
     }
 
-    fn set_timeout(&self, time_out: time::Duration) -> Result<(), AdbError> {
+    pub fn set_timeout(&self, time_out: time::Duration) -> Result<(), AdbError> {
         if !time_out.is_zero() {
             match &self.conn {
                 Some(conn) => {
@@ -245,7 +257,7 @@ impl AdbConnection {
         trim_command_length + trim_command
     }
 
-    fn send_command(&mut self, cmd: &str) -> Result<(), AdbError> {
+    pub fn send_command(&mut self, cmd: &str) -> Result<(), AdbError> {
         let msg = self.add_command_length_prefix(cmd.to_string());
         match &mut self.conn {
             Some(conn) => {
@@ -271,7 +283,7 @@ impl AdbConnection {
         res
     }
 
-    fn read_string_block(&mut self) -> Result<String, AdbError> {
+    pub fn read_string_block(&mut self) -> Result<String, AdbError> {
         let res = self.read_string(4);
         if res.len() == 0 {
             return Err(AdbError::ResponseStatusError {content: String::from("receive data error connection closed")})
@@ -281,7 +293,7 @@ impl AdbConnection {
         Ok(res)
     }
 
-    fn read_until_close(&mut self) -> Result<String, AdbError> {
+    pub fn read_until_close(&mut self) -> Result<String, AdbError> {
         let mut res = String::new();
         loop {
             let mut origin_buffer = self.read(4096 );
@@ -296,7 +308,7 @@ impl AdbConnection {
         Ok(res.to_string())
     }
 
-    fn check_oky(&mut self) -> Result<(), AdbError>{
+    pub fn check_oky(&mut self) -> Result<(), AdbError>{
         let data = self.read_string(4);
         if data == FAIL {
             log::debug!("receive data: {} connection closed", data)
@@ -320,7 +332,7 @@ mod test {
     #[test]
     fn test_connect() {
         let adb = AdbClient::new(String::from("localhost"), 5037, time::Duration::new(10, 0));
-        let client = adb._connect();
+        // let client = adb._connect();
         println!("adb version: {:?}", adb.server_version())
     }
 }
