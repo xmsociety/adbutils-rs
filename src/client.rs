@@ -135,7 +135,7 @@ impl AdbConnection {
         let conn = match self.create_socket() {
             Ok(conn) => conn,
             Err(error) =>
-                match error.kind() {
+                return match error.kind() {
                     io::ErrorKind::ConnectionRefused => {
                         match Command::new(&adb_path())
                             .arg("start-server")
@@ -152,19 +152,19 @@ impl AdbConnection {
                                     return Ok(conn);
                                 }
                                 let error = String::from_utf8_lossy(&response.stderr);
-                                return Err(AdbError::ResponseStatusError {
+                                Err(AdbError::ResponseStatusError {
                                     content: String::from(error.clone()),
-                                });
+                                })
                             }
                             Err(error) => {
-                                return Err(AdbError::StartAdbFailed {
+                                Err(AdbError::StartAdbFailed {
                                     source: Box::new(error),
-                                });
+                                })
                             }
                         }
                     }
                     _ => {
-                        return Err(AdbError::UnknownError { source: Box::new(error) });
+                        Err(AdbError::UnknownError { source: Box::new(error) })
                     }
                 }
         };
