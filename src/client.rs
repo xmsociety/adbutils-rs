@@ -1,3 +1,4 @@
+use std::borrow::{Borrow, BorrowMut};
 use std::env;
 use std::fmt::{Debug};
 use std::net::{Shutdown, TcpStream};
@@ -12,6 +13,7 @@ use log::{error, log, log_enabled};
 
 use crate::error::*;
 use crate::device::{AdbDevice, ShellMixin};
+use crate::proto::AdbConnectionOrString;
 
 const OKAY: &str = "OKAY";
 const FAIL: &str = "FAIL";
@@ -24,6 +26,19 @@ const LINUX: &str = "linux";
 
 fn check_server(host: &str, port: usize) -> bool {
     true
+}
+
+fn adb_path() -> String {
+    let cwd = env::current_dir().unwrap();
+    // let cwd_parent = cwd.parent().unwrap();
+    let os = env::consts::OS;
+    let mut adb_path = Path::join(&cwd, Path::new("binaries/mac/adb"));
+    if os == LINUX {
+        adb_path = Path::join(&cwd, Path::new("binaries/linux/adb"))
+    } else if os == WINDOWS {
+        adb_path = Path::join(&cwd, Path::new("binaries/win/adb.exe"))
+    }
+    adb_path.to_str().unwrap().to_string()
 }
 
 #[derive(Debug)]
@@ -83,43 +98,68 @@ impl AdbClient {
         conn.read_string_block().unwrap()
     }
 
-    pub fn shell(&self, serial: &str, commad: &str, stream: bool) -> String {
+    pub fn shell(&self, serial: &str, commad: &str, stream: bool) -> AdbConnectionOrString {
         let sn_tid = SerialNTransportID{
             serial: serial.to_string(),
             transport_id: 0,
         };
-        sn_tid.serial
+        return self.device(sn_tid).shell(commad, stream, self.socket_time);
     }
 
     pub fn devices_list(&self) -> Vec<AdbDevice>{
-        unimplemented!()
+        let mut res: Vec<AdbDevice> =Vec::new();
+        let mut c = self._connect();
+        c.send_command("host:devices").unwrap();
+        c.check_oky().unwrap();
+        let out_put = c.read_string_block().unwrap();
+        let out_puts: Vec<&str> = out_put.split("\n").collect();
+        for line in out_puts.into_iter() {
+            let parts: Vec<&str> = line.split("\t").collect();
+            if parts.len() == 2 && parts[1] == "device"{
+                res.push(AdbDevice{shell_mixin: ShellMixin::new(AdbClient{
+                    host: self.host.clone(),
+                    port: self.port.clone(),
+                    socket_time: self.socket_time.clone()
+                }, parts[0].to_string(), 0, None)})
+            }
+        }
+        res
     }
 
     pub fn device(&self, sn_tid: SerialNTransportID) -> AdbDevice {
         if sn_tid.serial != "" || sn_tid.transport_id != 0 {
-            AdbDevice{shell_mixin: ShellMixin::new(self, sn_tid.serial, sn_tid.transport_id, None)}
+            return AdbDevice { shell_mixin: ShellMixin::new(AdbClient{
+                host: self.host.clone(),
+                port: self.port.clone(),
+                socket_time: self.socket_time.clone()
+            }, sn_tid.serial, sn_tid.transport_id, None) }
         }
-        let serial = "";
-        unimplemented!()
+        let serial = env::var("ANDROID_SERIAL").unwrap();
+        if serial != "" {
+            let ds = self.devices_list();
+            if ds.len() == 0 {
+                log::info!("Error: Can't find any android device/emulator")
+            } else if ds.len() > 1 {
+                log::info!("more than one device/emulator, please specify the serial number")
+            } else {
+                return AdbDevice{shell_mixin: ShellMixin::new(AdbClient{
+                    host: self.host.clone(),
+                    port: self.port.clone(),
+                    socket_time: self.socket_time.clone()
+                }, ds[0].get_serial_no(), 0, None)}
+            }
+        }
+        return AdbDevice{shell_mixin: ShellMixin::new(AdbClient{
+            host: self.host.clone(),
+            port: self.port.clone(),
+            socket_time: self.socket_time.clone()
+        }, sn_tid.serial, sn_tid.transport_id, None)}
     }
 }
 
 struct SerialNTransportID {
     serial: String,
     transport_id: i32,
-}
-
-fn adb_path() -> String {
-    let cwd = env::current_dir().unwrap();
-    // let cwd_parent = cwd.parent().unwrap();
-    let os = env::consts::OS;
-    let mut adb_path = Path::join(&cwd, Path::new("binaries/mac/adb"));
-    if os == LINUX {
-        adb_path = Path::join(&cwd, Path::new("binaries/linux/adb"))
-    } else if os == WINDOWS {
-        adb_path = Path::join(&cwd, Path::new("binaries/win/adb.exe"))
-    }
-    adb_path.to_str().unwrap().to_string()
 }
 
 #[derive(Debug)]
@@ -335,4 +375,11 @@ mod test {
         // let client = adb._connect();
         println!("adb version: {:?}", adb.server_version())
     }
+    #[test]
+    fn test_devices() {
+        let adb = AdbClient::new(String::from("localhost"), 5037, time::Duration::new(10, 0));
+        println!("{:?}", adb.devices_list());
+        println!("{:?}", adb.devices_list()[0].shell("ls -a ", false, time::Duration::new(0, 0)))
+    }
+
 }
