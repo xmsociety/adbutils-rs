@@ -1,23 +1,26 @@
-use std::collections::HashMap;
-use std::fmt::{Display, format, Formatter, Pointer, write};
-use std::time;
 use crate::client::{AdbClient, AdbConnection};
 use crate::error::AdbError;
 use crate::proto::AdbConnectionOrString;
-
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::time;
 
 #[derive(Debug)]
 pub struct ShellMixin {
     pub client: AdbClient,
     pub serial: String,
     pub transport_id: i32,
-    pub properties: Option<HashMap<String, String>>
+    pub properties: Option<HashMap<String, String>>,
 }
 
 impl ShellMixin {
-
-    pub fn new(client: AdbClient, serial: String, transport_id: i32, properties: Option<HashMap<String, String>>) -> ShellMixin {
-        Self{
+    pub fn new(
+        client: AdbClient,
+        serial: String,
+        transport_id: i32,
+        properties: Option<HashMap<String, String>>,
+    ) -> ShellMixin {
+        Self {
             client,
             serial,
             transport_id,
@@ -34,14 +37,13 @@ impl ShellMixin {
         let res = self.run("echo ".to_string() + content.as_str());
         match res {
             AdbConnectionOrString::String(str) => str,
-            _ => String::from("err say_hello")
+            _ => String::from("err say_hello"),
         }
     }
 
     pub fn switch_screen(&self, status: bool) {
         let key_map: HashMap<bool, &str> = HashMap::from([(true, "224"), (false, "223")]);
         let cmd = key_map.get(&status).unwrap();
-
     }
 
     pub fn switch_air_plane(&self, status: bool) {
@@ -59,7 +61,10 @@ impl ShellMixin {
     }
 
     pub fn switch_wifi(&self, status: bool) {
-        let cmd_map: HashMap<bool, String> = HashMap::from([(true, "svc wifi enable".to_string()), (false, "svc wifi disable".to_string())]);
+        let cmd_map: HashMap<bool, String> = HashMap::from([
+            (true, "svc wifi enable".to_string()),
+            (false, "svc wifi disable".to_string()),
+        ]);
         let cmd = cmd_map.get(&status).unwrap();
         self.run(String::from(cmd));
     }
@@ -67,7 +72,7 @@ impl ShellMixin {
         let res = self.run("input keyevent ".to_string() + key_code);
         match res {
             AdbConnectionOrString::String(str) => str,
-            _ => String::from("err key_event")
+            _ => String::from("err key_event"),
         }
     }
 
@@ -76,7 +81,14 @@ impl ShellMixin {
     }
 
     pub fn swipe(&self, x: i32, y: i32, tox: i32, toy: i32, duration: time::Duration) {
-        self.run(format!("input swipe {} {} {} {} {}", x, y, tox, toy, duration.as_secs() * 1000));
+        self.run(format!(
+            "input swipe {} {} {} {} {}",
+            x,
+            y,
+            tox,
+            toy,
+            duration.as_secs() * 1000
+        ));
     }
 
     pub fn send_keys(&self, text: &str) {
@@ -89,7 +101,7 @@ impl ShellMixin {
         let res = self.run("ifconfig wlan0".to_string());
         match res {
             AdbConnectionOrString::String(str) => str,
-            _ => String::from("err wlan_ip")
+            _ => String::from("err wlan_ip"),
         }
     }
 
@@ -102,14 +114,14 @@ impl ShellMixin {
     }
 
     pub fn uninstall(&self, package_name: &str) {
-        self.run(format!("pm uninstall {}",  package_name));
+        self.run(format!("pm uninstall {}", package_name));
     }
 
     pub fn get_prop(&self, prop: &str) -> String {
         let res = self.run("getprop ".to_string() + prop);
         match res {
             AdbConnectionOrString::String(str) => str,
-            _ => String::from("err get_prop")
+            _ => String::from("err get_prop"),
         }
     }
 
@@ -122,9 +134,9 @@ impl ShellMixin {
                 for package in packages {
                     res.push(package.to_string())
                 }
-                return res
+                return res;
             }
-            _ => res
+            _ => res,
         }
     }
 
@@ -144,11 +156,14 @@ impl ShellMixin {
         unimplemented!()
     }
 
-    pub fn app_start(&self, package_name: &str, activity: &str){
+    pub fn app_start(&self, package_name: &str, activity: &str) {
         if activity != "" {
             self.run(format!("am start -n {} / {}", package_name, activity));
-        }else {
-            self.run(format!("monkey -p {} -c android.intent.category.LAUNCHER 1", package_name));
+        } else {
+            self.run(format!(
+                "monkey -p {} -c android.intent.category.LAUNCHER 1",
+                package_name
+            ));
         }
     }
 
@@ -166,10 +181,8 @@ impl ShellMixin {
             AdbConnectionOrString::String(str) => {
                 str.contains("mHoldingDisplaySuspendBlocker=true")
             }
-            _ => {
-                false
-            }
-        }
+            _ => false,
+        };
     }
 
     pub fn open_browser(&self, url: &str) {
@@ -188,14 +201,19 @@ impl ShellMixin {
         self.run("rm ".to_string() + path);
     }
 
-    fn open_transport(&self, command:&str, time_out: time::Duration) -> AdbConnection {
+    fn open_transport(&self, command: &str, time_out: time::Duration) -> AdbConnection {
         let mut conn = self.client._connect();
         conn.set_timeout(time_out).unwrap();
         if command != "" {
             if self.transport_id > 0 {
-                conn.send_command(&format!("host-transport-id:{}:{}", self.transport_id, command)).unwrap()
+                conn.send_command(&format!(
+                    "host-transport-id:{}:{}",
+                    self.transport_id, command
+                ))
+                .unwrap()
             } else if self.serial != "" {
-                conn.send_command(&format!("host-serial:{}:{}", self.serial, command)).unwrap()
+                conn.send_command(&format!("host-serial:{}:{}", self.serial, command))
+                    .unwrap()
             } else {
                 panic!("RuntimeError")
             };
@@ -207,13 +225,16 @@ impl ShellMixin {
 
 #[derive(Debug)]
 pub struct AdbDevice {
-    pub shell_mixin: ShellMixin
+    pub shell_mixin: ShellMixin,
 }
 
 impl AdbDevice {
     pub fn get_with_command(&self, cmd: &str) -> String {
-        let mut conn = self.shell_mixin.open_transport("", self.shell_mixin.client.socket_time);
-        conn.send_command(&format!("host-serial:{}:{}", self.shell_mixin.serial, cmd)).unwrap();
+        let mut conn = self
+            .shell_mixin
+            .open_transport("", self.shell_mixin.client.socket_time);
+        conn.send_command(&format!("host-serial:{}:{}", self.shell_mixin.serial, cmd))
+            .unwrap();
         conn.check_oky().unwrap();
         conn.read_string_block().unwrap()
     }
@@ -245,24 +266,31 @@ impl AdbDevice {
         unimplemented!()
     }
 
-    pub fn shell(&self, cmd: &str, stream: bool, time_out: time::Duration) -> AdbConnectionOrString {
+    pub fn shell(
+        &self,
+        cmd: &str,
+        stream: bool,
+        time_out: time::Duration,
+    ) -> AdbConnectionOrString {
         let mut conn = self.shell_mixin.open_transport("", time_out);
         conn.send_command(&format!("shell:{}", cmd)).unwrap();
         conn.check_oky().unwrap();
         if stream {
-            return AdbConnectionOrString::AdbConnection(conn)
+            return AdbConnectionOrString::AdbConnection(conn);
         }
         AdbConnectionOrString::String(conn.read_until_close().unwrap())
     }
 
     pub fn shell_out_put(&self, cmd: &str) -> String {
-        let out_put= self.shell_mixin.client.shell(&self.shell_mixin.serial, cmd, false);
+        let out_put = self
+            .shell_mixin
+            .client
+            .shell(&self.shell_mixin.serial, cmd, false);
         match out_put {
             AdbConnectionOrString::String(str) => str,
-            _ => String::from("get shell_out_put error!")
+            _ => String::from("get shell_out_put error!"),
         }
     }
-
 }
 
 impl Display for AdbDevice {
@@ -273,5 +301,5 @@ impl Display for AdbDevice {
 
 struct Sync {
     adb_client: AdbClient,
-    serial:  String,
+    serial: String,
 }

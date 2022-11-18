@@ -1,9 +1,8 @@
-
 use std::net::TcpStream;
-mod proto;
-mod device;
 mod client;
+mod device;
 mod error;
+mod proto;
 
 // thx https://github.com/WangZemin0816/rust-adb/blob/d415ab988dce9090da987e066695803388b58ea4/src/adb_host/mod.rs
 pub trait SyncHostCommand {
@@ -24,9 +23,3 @@ pub struct AsyncHostResponse {
     pub tcp_stream: TcpStream,
 }
 // thx end
-
-#[cfg(test)]
-mod tests {
-    use crate::client::AdbClient;
-    use super::*;
-}
