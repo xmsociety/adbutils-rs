@@ -1,6 +1,6 @@
 [package]
 name = "adbutils"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sato <ysudqfs@163.com>"]
 description = "pure rust adb library for google adb service.."
 edition = "2021"
