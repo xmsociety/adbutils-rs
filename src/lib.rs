@@ -1,8 +1,8 @@
 use std::net::TcpStream;
-mod client;
-mod device;
-mod error;
-mod proto;
+pub mod client;
+pub mod device;
+pub mod error;
+pub mod proto;
 
 // thx https://github.com/WangZemin0816/rust-adb/blob/d415ab988dce9090da987e066695803388b58ea4/src/adb_host/mod.rs
 pub trait SyncHostCommand {
